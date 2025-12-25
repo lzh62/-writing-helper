@@ -20,14 +20,14 @@ const App: React.FC = () => {
     currentChapter: 1,
     error: null,
   });
-  
+
   const [currentGuidance, setCurrentGuidance] = useState<string>('');
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingChapterIndex, setPlayingChapterIndex] = useState<number | null>(null);
   const [isEditingBlueprint, setIsEditingBlueprint] = useState(false);
   const [editableBlueprint, setEditableBlueprint] = useState('');
-  
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const storyEndRef = useRef<HTMLDivElement>(null);
@@ -52,30 +52,31 @@ const App: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      setState(prev => ({ 
-        ...prev, 
-        image: base64, 
-        isLoading: true, 
-        error: null, 
-        paragraph: '', 
-        analysis: '', 
+      setState(prev => ({
+        ...prev,
+        image: base64,
+        isLoading: true,
+        error: null,
+        paragraph: '',
+        analysis: '',
         blueprint: '',
-        currentChapter: 1 
+        currentChapter: 1
       }));
       setCurrentGuidance('');
       stopAudio();
-      
+
       try {
         const result = await analyzeAndPlan(base64);
-        setState(prev => ({ 
-          ...prev, 
-          isLoading: false, 
-          analysis: result.analysis, 
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          analysis: result.analysis,
           blueprint: result.blueprint,
-          paragraph: result.firstChapter 
+          paragraph: result.firstChapter
         }));
-      } catch (err) {
-        setState(prev => ({ ...prev, isLoading: false, error: '创作启动失败，请检查网络。' }));
+      } catch (err: any) {
+        console.error("Creation failed:", err);
+        setState(prev => ({ ...prev, isLoading: false, error: `创作启动失败: ${err.message || '请检查网络或API Key'}` }));
       }
     };
     reader.readAsDataURL(file);
@@ -88,10 +89,10 @@ const App: React.FC = () => {
 
   const generateNextPartOfStory = async () => {
     if (isAutoGenerating || !state.blueprint) return;
-    
+
     setIsAutoGenerating(true);
     stopSignal.current = false;
-    
+
     let chapter = state.currentChapter + 1;
     let currentContent = state.paragraph;
 
@@ -100,7 +101,7 @@ const App: React.FC = () => {
       // 使用最新的 state.blueprint 进行续写
       const nextPart = await writeNextChapter(currentContent, state.blueprint, chapter, state.image, guidanceToUse);
       currentContent += "\n\n" + nextPart;
-      
+
       setState(prev => ({
         ...prev,
         paragraph: currentContent,
@@ -135,12 +136,12 @@ const App: React.FC = () => {
     }
 
     if (!state.paragraph) return;
-    
+
     setIsPlaying(true);
     isReadingRef.current = true;
 
     const chapters = state.paragraph.split(/\n\n(?=第.*章)/);
-    
+
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -148,23 +149,23 @@ const App: React.FC = () => {
 
       for (let i = 0; i < chapters.length; i++) {
         if (!isReadingRef.current) break;
-        
+
         setPlayingChapterIndex(i + 1);
         const chapterText = chapters[i];
         const voice = (i % 2 === 0) ? 'Kore' : 'Puck';
         const textToRead = chapterText.slice(0, 1500);
         const audioBase64 = await generateSpeech(textToRead, voice);
-        
+
         if (!isReadingRef.current) break;
 
         const audioData = decodeBase64ToUint8Array(audioBase64);
         const buffer = await decodeAudioData(audioData, audioContextRef.current);
-        
+
         const source = audioContextRef.current.createBufferSource();
         source.buffer = buffer;
         source.connect(audioContextRef.current.destination);
         sourceRef.current = source;
-        
+
         await new Promise<void>((resolve) => {
           source.onended = () => {
             resolve();
@@ -216,7 +217,7 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+
           {/* 左侧栏：灵感图与蓝图 */}
           <div className="lg:col-span-3 space-y-6">
             <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-200">
@@ -247,16 +248,16 @@ const App: React.FC = () => {
                       <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></span>
                       全书蓝图
                     </h3>
-                    <button 
+                    <button
                       onClick={() => isEditingBlueprint ? handleSaveBlueprint() : setIsEditingBlueprint(true)}
                       className="text-[10px] font-bold bg-indigo-800 hover:bg-indigo-700 px-3 py-1 rounded-full transition-colors"
                     >
                       {isEditingBlueprint ? "保存修改" : "修改蓝图"}
                     </button>
                   </div>
-                  
+
                   {isEditingBlueprint ? (
-                    <textarea 
+                    <textarea
                       value={editableBlueprint}
                       onChange={(e) => setEditableBlueprint(e.target.value)}
                       className="text-xs bg-indigo-950/50 border border-indigo-700 rounded-xl p-3 h-[300px] focus:outline-none focus:ring-1 focus:ring-indigo-400 text-indigo-100 leading-loose resize-none custom-scrollbar"
@@ -267,15 +268,14 @@ const App: React.FC = () => {
                     </div>
                   )}
                 </div>
-                
+
                 {state.paragraph && (
-                  <button 
+                  <button
                     onClick={handleReadFullStory}
-                    className={`w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-3 shadow-lg ${
-                      isPlaying 
-                        ? 'bg-red-50 text-red-600 border border-red-100' 
+                    className={`w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-3 shadow-lg ${isPlaying
+                        ? 'bg-red-50 text-red-600 border border-red-100'
                         : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50'
-                    }`}
+                      }`}
                   >
                     {isPlaying ? (
                       <>
@@ -305,8 +305,8 @@ const App: React.FC = () => {
             <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 min-h-[85vh] p-8 md:p-16 relative flex flex-col">
               {/* 顶部进度条 */}
               <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-50">
-                <div 
-                  className="h-full bg-indigo-500 transition-all duration-1000" 
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-1000"
                   style={{ width: `${(state.currentChapter / 6) * 100}%` }}
                 />
               </div>
@@ -328,7 +328,7 @@ const App: React.FC = () => {
                     </p>
                   ))}
                   <div ref={storyEndRef} />
-                  
+
                   {isAutoGenerating && (
                     <div className="py-12 flex flex-col items-center gap-4 text-indigo-400">
                       <div className="flex gap-2">
@@ -347,7 +347,7 @@ const App: React.FC = () => {
                   <p className="serif text-2xl font-light">万字长卷，始于一张图片的触动</p>
                 </div>
               )}
-              
+
               {/* 创作控制台 */}
               {state.paragraph && !state.isLoading && state.currentChapter < 6 && (
                 <div className="mt-12 flex flex-col items-center gap-6 p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100">
@@ -359,9 +359,9 @@ const App: React.FC = () => {
                       {currentGuidance ? `下章重心：${currentGuidance.slice(0, 50)}...` : "系统将根据默认大纲续写"}
                     </p>
                   </div>
-                  
+
                   <div className="flex gap-4">
-                    <button 
+                    <button
                       onClick={generateNextPartOfStory}
                       disabled={isAutoGenerating}
                       className="group bg-indigo-600 text-white px-10 py-5 rounded-full font-bold flex items-center gap-3 hover:bg-indigo-700 active:scale-95 transition-all shadow-2xl shadow-indigo-200 disabled:opacity-50"
@@ -373,9 +373,9 @@ const App: React.FC = () => {
                         </svg>
                       )}
                     </button>
-                    
+
                     {isAutoGenerating && (
-                      <button 
+                      <button
                         onClick={handleStop}
                         className="bg-white text-slate-600 px-8 py-5 rounded-full font-bold border border-slate-200 hover:bg-slate-50 transition-all"
                       >
@@ -390,38 +390,38 @@ const App: React.FC = () => {
 
           {/* 右侧栏：创作助手交互 */}
           <div className="lg:col-span-3">
-             <div className="sticky top-24 space-y-6">
-                <ChatInterface 
-                  imageBase64={state.image} 
-                  storyContext={state.paragraph} 
-                  onAssistantReply={setCurrentGuidance}
-                />
-                
-                <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">当前创作参数</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">已创作字数</span>
-                      <span className="font-mono font-bold text-indigo-600">{state.paragraph.length}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">已完成章节</span>
-                      <span className="font-mono font-bold text-indigo-600">{state.currentChapter} / 6</span>
-                    </div>
-                    <div className="pt-3 border-t border-slate-100">
-                       <span className="text-[10px] text-slate-400 block mb-1">同步状态</span>
-                       <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${currentGuidance ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                          <span className="text-[11px] font-medium text-slate-700">
-                            {currentGuidance ? "已关联助手提示" : "等待助手提示..."}
-                          </span>
-                       </div>
+            <div className="sticky top-24 space-y-6">
+              <ChatInterface
+                imageBase64={state.image}
+                storyContext={state.paragraph}
+                onAssistantReply={setCurrentGuidance}
+              />
+
+              <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">当前创作参数</h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">已创作字数</span>
+                    <span className="font-mono font-bold text-indigo-600">{state.paragraph.length}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">已完成章节</span>
+                    <span className="font-mono font-bold text-indigo-600">{state.currentChapter} / 6</span>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100">
+                    <span className="text-[10px] text-slate-400 block mb-1">同步状态</span>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${currentGuidance ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                      <span className="text-[11px] font-medium text-slate-700">
+                        {currentGuidance ? "已关联助手提示" : "等待助手提示..."}
+                      </span>
                     </div>
                   </div>
                 </div>
-             </div>
+              </div>
+            </div>
           </div>
-          
+
         </div>
       </main>
 
